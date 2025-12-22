@@ -1,57 +1,65 @@
-name: Build-Deploy-Stage
+name: Build-Deploy-Prod
 
 on:
   workflow_dispatch:
     branches:
-      - stage
+      - prod
 
 env:
-  SKIP_AWS: 'true'            # set to 'false' to enable real AWS steps
+  SKIP_AWS: 'true'           # set to 'false' to enable AWS steps
   AWS_REGION: af-south-1
-  ECR_REPOSITORY: console-stage-web
-  ECS_SERVICE: console-stage-web
-  ECS_CLUSTER: console-stage
-  ECS_CONTAINER_NAME: console-stage-web
-  ECR_BUILD_IMAGE: console-build
+  ECR_REPOSITORY: juniorminds-prod-web
+  ECS_SERVICE: juniorminds-prod-web
+  ECS_CLUSTER: juniorminds-prod
+  ECS_CONTAINER_NAME: juniorminds-prod-web
+  ECR_BUILD_IMAGE: juniorminds-build
 
 permissions:
   id-token: write
   contents: read
 
 jobs:
-  Build-Deploy:
+  Build:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node: [24]
+        node: [18]
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      - name: Sonarqube Scan (only if secrets present)
-        if: ${{ secrets.SONAR_TOKEN != '' && secrets.SONAR_HOST_URL != '' }}
-        uses: SonarSource/sonarqube-scan-action@v6
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-
-      # ---- AWS: configure (skippable)
       - name: SKIP: Configure AWS Credentials (skipping)
         if: ${{ env.SKIP_AWS == 'true' }}
         run: echo "SKIPPING AWS: Configure AWS Credentials (set SKIP_AWS to 'false' to enable)"
 
-      - name: Configure AWS Credentials (assume role)
+      - name: Configure AWS Credentials
         if: ${{ env.SKIP_AWS != 'true' }}
-        uses: aws-actions/configure-aws-credentials@v2
+        uses: aws-actions/configure-aws-credentials@v5.1.0
         with:
-          role-to-assume: ${{ secrets.AWS_STAGE_GITHUB_ROLE }}
+          role-to-assume: ${{ secrets.AWS_PROD_GITHUB_ROLE }}
           role-session-name: GitHub_to_AWS_via_FederatedOIDC
           aws-region: ${{ env.AWS_REGION }}
 
-      # ---- ECR login (skippable)
+      - name: Setup env (optional)
+        if: ${{ env.SKIP_AWS != 'true' }}
+        run: |
+          aws ssm get-parameters \
+            --with-decryption \
+            --names "${{ secrets.PROD_CONFIG }}" \
+            --output text \
+            --query "Parameters[*].{Value:Value}" > $PWD/.env
+
+      - name: NPM Install (frontend)
+        working-directory: frontend
+        run: npm ci
+
+      - name: Npm Build (frontend)
+        working-directory: frontend
+        run: npm run build
+
       - name: SKIP: Login to Amazon ECR (skipping)
         if: ${{ env.SKIP_AWS == 'true' }}
         run: echo "SKIPPING AWS: login-ecr (set SKIP_AWS to 'false' to enable)"
@@ -59,23 +67,14 @@ jobs:
       - name: Login to Amazon ECR
         if: ${{ env.SKIP_AWS != 'true' }}
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
+        uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Npm install (frontend)
-        working-directory: frontend
-        run: npm ci
-
-      - name: Build frontend
-        working-directory: frontend
-        run: npm run build
-
-      - name: SKIP: Build, tag, push image to ECR (skipping)
+      - name: SKIP: Build and Push Docker Image (skipping)
         if: ${{ env.SKIP_AWS == 'true' }}
-        run: echo "SKIPPING AWS: Build/Push Docker image to ECR (set SKIP_AWS to 'false' to enable)"
+        run: echo "SKIPPING AWS: Build and Push Docker Image (set SKIP_AWS to 'false' to enable)"
 
-      - name: Build, tag, and push image to Amazon ECR
+      - name: Build and Push Docker Image
         if: ${{ env.SKIP_AWS != 'true' }}
-        id: build-image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: latest
@@ -83,6 +82,23 @@ jobs:
           docker pull $ECR_REGISTRY/${{ env.ECR_BUILD_IMAGE }}:$IMAGE_TAG || true
           docker build -t $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG ./frontend
           docker push $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG
+
+  Deploy:
+    runs-on: ubuntu-latest
+    needs: Build
+
+    steps:
+      - name: SKIP: Configure AWS Credentials (skipping)
+        if: ${{ env.SKIP_AWS == 'true' }}
+        run: echo "SKIPPING AWS: Configure AWS Credentials (set SKIP_AWS to 'false' to enable)"
+
+      - name: Configure AWS Credentials
+        if: ${{ env.SKIP_AWS != 'true' }}
+        uses: aws-actions/configure-aws-credentials@v5.1.0
+        with:
+          role-to-assume: ${{ secrets.AWS_PROD_GITHUB_ROLE }}
+          role-session-name: GitHub_to_AWS_via_FederatedOIDC
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: SKIP: ECS Deployment (skipping)
         if: ${{ env.SKIP_AWS == 'true' }}
@@ -95,3 +111,14 @@ jobs:
             --cluster ${{ env.ECS_CLUSTER }} \
             --service ${{ env.ECS_SERVICE }} \
             --force-new-deployment
+
+      - name: SKIP: ECS Service Health (skipping)
+        if: ${{ env.SKIP_AWS == 'true' }}
+        run: echo "SKIPPING AWS: ECS Service Health (set SKIP_AWS to 'false' to enable)"
+
+      - name: ECS Service Health
+        if: ${{ env.SKIP_AWS != 'true' }}
+        run: |
+          aws ecs wait services-stable \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --services ${{ env.ECS_SERVICE }}
