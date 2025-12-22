@@ -1,0 +1,81 @@
+name: Build-Deploy-Prod
+
+on:
+  workflow_dispatch:
+    branches:
+      - prod
+
+env:
+  AWS_REGION: af-south-1
+  ECR_REPOSITORY: juniorminds-prod-web
+  ECS_SERVICE: juniorminds-prod-web
+  ECS_CLUSTER: juniorminds-prod
+  ECS_CONTAINER_NAME: juniorminds-prod-web
+  ECR_BUILD_IMAGE: juniorminds-build
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  Build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [18]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v5.1.0
+        with:
+          role-to-assume: ${{ secrets.AWS_PROD_GITHUB_ROLE }}
+          role-session-name: GitHub_to_AWS_via_FederatedOIDC
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup env (optional)
+        run: |
+          aws ssm get-parameters --with-decryption --names "${{ secrets.PROD_CONFIG }}" --output text --query "Parameters[*].{Value:Value}" > $PWD/.env
+
+      - name: NPM Install (frontend)
+        working-directory: frontend
+        run: npm ci
+
+      - name: Npm Build (frontend)
+        working-directory: frontend
+        run: npm run build
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and Push Docker Image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: latest
+        run: |
+          docker pull $ECR_REGISTRY/${{ env.ECR_BUILD_IMAGE }}:$IMAGE_TAG || true
+          docker build -t $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG ./frontend
+          docker push $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG
+
+  Deploy:
+    runs-on: ubuntu-latest
+    needs: Build
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v5.1.0
+        with:
+          role-to-assume: ${{ secrets.AWS_PROD_GITHUB_ROLE }}
+          role-session-name: GitHub_to_AWS_via_FederatedOIDC
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: ECS Deployment
+        run: |
+          aws ecs update-service --cluster ${{ env.ECS_CLUSTER }} --service ${{ env.ECS_SERVICE }} --force-new-deployment
+
+      - name: ECS Service Health
+        run: |
+          aws ecs wait services-stable --cluster ${{ env.ECS_CLUSTER }} --services ${{ env.ECS_SERVICE }}
