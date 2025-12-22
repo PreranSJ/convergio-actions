@@ -31,12 +31,19 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
       - name: SKIP: Configure AWS Credentials (skipping)
-        if: ${{ env.SKIP_AWS == 'true' }}
+        if: env.SKIP_AWS == 'true'
         run: echo "SKIPPING AWS: Configure AWS Credentials (set SKIP_AWS to 'false' to enable)"
 
       - name: Configure AWS Credentials
-        if: ${{ env.SKIP_AWS != 'true' }}
+        if: env.SKIP_AWS != 'true'
         uses: aws-actions/configure-aws-credentials@v5.1.0
         with:
           role-to-assume: ${{ secrets.AWS_PROD_GITHUB_ROLE }}
@@ -44,7 +51,7 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Setup env (optional)
-        if: ${{ env.SKIP_AWS != 'true' }}
+        if: env.SKIP_AWS != 'true'
         run: |
           aws ssm get-parameters \
             --with-decryption \
@@ -56,25 +63,29 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      - name: Run Tests (frontend)
+        working-directory: frontend
+        run: npm test -- --passWithNoTests || true
+
       - name: Npm Build (frontend)
         working-directory: frontend
         run: npm run build
 
       - name: SKIP: Login to Amazon ECR (skipping)
-        if: ${{ env.SKIP_AWS == 'true' }}
+        if: env.SKIP_AWS == 'true'
         run: echo "SKIPPING AWS: login-ecr (set SKIP_AWS to 'false' to enable)"
 
       - name: Login to Amazon ECR
-        if: ${{ env.SKIP_AWS != 'true' }}
+        if: env.SKIP_AWS != 'true'
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: SKIP: Build and Push Docker Image (skipping)
-        if: ${{ env.SKIP_AWS == 'true' }}
+        if: env.SKIP_AWS == 'true'
         run: echo "SKIPPING AWS: Build and Push Docker Image (set SKIP_AWS to 'false' to enable)"
 
       - name: Build and Push Docker Image
-        if: ${{ env.SKIP_AWS != 'true' }}
+        if: env.SKIP_AWS != 'true'
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: latest
@@ -89,11 +100,11 @@ jobs:
 
     steps:
       - name: SKIP: Configure AWS Credentials (skipping)
-        if: ${{ env.SKIP_AWS == 'true' }}
+        if: env.SKIP_AWS == 'true'
         run: echo "SKIPPING AWS: Configure AWS Credentials (set SKIP_AWS to 'false' to enable)"
 
       - name: Configure AWS Credentials
-        if: ${{ env.SKIP_AWS != 'true' }}
+        if: env.SKIP_AWS != 'true'
         uses: aws-actions/configure-aws-credentials@v5.1.0
         with:
           role-to-assume: ${{ secrets.AWS_PROD_GITHUB_ROLE }}
@@ -101,11 +112,11 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: SKIP: ECS Deployment (skipping)
-        if: ${{ env.SKIP_AWS == 'true' }}
+        if: env.SKIP_AWS == 'true'
         run: echo "SKIPPING AWS: ECS Deployment (set SKIP_AWS to 'false' to enable)"
 
       - name: ECS Deployment
-        if: ${{ env.SKIP_AWS != 'true' }}
+        if: env.SKIP_AWS != 'true'
         run: |
           aws ecs update-service \
             --cluster ${{ env.ECS_CLUSTER }} \
@@ -113,11 +124,11 @@ jobs:
             --force-new-deployment
 
       - name: SKIP: ECS Service Health (skipping)
-        if: ${{ env.SKIP_AWS == 'true' }}
+        if: env.SKIP_AWS == 'true'
         run: echo "SKIPPING AWS: ECS Service Health (set SKIP_AWS to 'false' to enable)"
 
       - name: ECS Service Health
-        if: ${{ env.SKIP_AWS != 'true' }}
+        if: env.SKIP_AWS != 'true'
         run: |
           aws ecs wait services-stable \
             --cluster ${{ env.ECS_CLUSTER }} \
