@@ -3,21 +3,11 @@ name: Build-Deploy-Stage
 on:
   workflow_dispatch:
 
-env:
-  SKIP_AWS: 'true'            # set to 'false' to enable real AWS steps
-  AWS_REGION: af-south-1
-  ECR_REPOSITORY: console-stage-web
-  ECS_SERVICE: console-stage-web
-  ECS_CLUSTER: console-stage
-  ECS_CONTAINER_NAME: console-stage-web
-  ECR_BUILD_IMAGE: console-build
-
 permissions:
-  id-token: write
   contents: read
 
 jobs:
-  Build-Deploy:
+  Build-Test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -36,36 +26,6 @@ jobs:
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Sonarqube Scan (only if secrets present)
-        if: secrets.SONAR_TOKEN != '' && secrets.SONAR_HOST_URL != ''
-        uses: SonarSource/sonarqube-scan-action@v6
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-
-      # ---- AWS: configure (skippable)
-      - name: 'SKIP: Configure AWS Credentials (skipping)'
-        if: env.SKIP_AWS == 'true'
-        run: echo "SKIPPING AWS: Configure AWS Credentials (set SKIP_AWS to 'false' to enable)"
-
-      - name: Configure AWS Credentials (assume role)
-        if: env.SKIP_AWS != 'true'
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          role-to-assume: ${{ secrets.AWS_STAGE_GITHUB_ROLE }}
-          role-session-name: GitHub_to_AWS_via_FederatedOIDC
-          aws-region: ${{ env.AWS_REGION }}
-
-      # ---- ECR login (skippable)
-      - name: 'SKIP: Login to Amazon ECR (skipping)'
-        if: env.SKIP_AWS == 'true'
-        run: echo "SKIPPING AWS: login-ecr (set SKIP_AWS to 'false' to enable)"
-
-      - name: Login to Amazon ECR
-        if: env.SKIP_AWS != 'true'
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
-
       - name: Npm install (frontend)
         working-directory: frontend
         run: npm ci
@@ -78,29 +38,38 @@ jobs:
         working-directory: frontend
         run: npm run build
 
-      - name: 'SKIP: Build, tag, push image to ECR (skipping)'
-        if: env.SKIP_AWS == 'true'
-        run: echo "SKIPPING AWS: Build/Push Docker image to ECR (set SKIP_AWS to 'false' to enable)"
-
-      - name: Build, tag, and push image to Amazon ECR
-        if: env.SKIP_AWS != 'true'
-        id: build-image
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: latest
-        run: |
-          docker pull $ECR_REGISTRY/${{ env.ECR_BUILD_IMAGE }}:$IMAGE_TAG || true
-          docker build -t $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG ./frontend
-          docker push $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG
-
-      - name: 'SKIP: ECS Deployment (skipping)'
-        if: env.SKIP_AWS == 'true'
-        run: echo "SKIPPING AWS: ECS Deployment (set SKIP_AWS to 'false' to enable)"
-
-      - name: ECS Deployment
-        if: env.SKIP_AWS != 'true'
-        run: |
-          aws ecs update-service \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --service ${{ env.ECS_SERVICE }} \
-            --force-new-deployment
+      # ---- AWS steps commented out for now - uncomment when needed
+      # - name: Sonarqube Scan (only if secrets present)
+      #   if: secrets.SONAR_TOKEN != '' && secrets.SONAR_HOST_URL != ''
+      #   uses: SonarSource/sonarqube-scan-action@v6
+      #   env:
+      #     SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      #     SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+      #
+      # - name: Configure AWS Credentials
+      #   uses: aws-actions/configure-aws-credentials@v2
+      #   with:
+      #     role-to-assume: ${{ secrets.AWS_STAGE_GITHUB_ROLE }}
+      #     role-session-name: GitHub_to_AWS_via_FederatedOIDC
+      #     aws-region: af-south-1
+      #
+      # - name: Login to Amazon ECR
+      #   id: login-ecr
+      #   uses: aws-actions/amazon-ecr-login@v1
+      #
+      # - name: Build, tag, and push image to Amazon ECR
+      #   id: build-image
+      #   env:
+      #     ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+      #     IMAGE_TAG: latest
+      #   run: |
+      #     docker pull $ECR_REGISTRY/console-build:$IMAGE_TAG || true
+      #     docker build -t $ECR_REGISTRY/console-stage-web:$IMAGE_TAG ./frontend
+      #     docker push $ECR_REGISTRY/console-stage-web:$IMAGE_TAG
+      #
+      # - name: ECS Deployment
+      #   run: |
+      #     aws ecs update-service \
+      #       --cluster console-stage \
+      #       --service console-stage-web \
+      #       --force-new-deployment
