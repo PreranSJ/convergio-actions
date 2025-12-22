@@ -2,8 +2,6 @@ name: Build-Deploy-Prod
 
 on:
   workflow_dispatch:
-    branches:
-      - prod
 
 env:
   SKIP_AWS: 'true'           # set to 'false' to enable AWS steps

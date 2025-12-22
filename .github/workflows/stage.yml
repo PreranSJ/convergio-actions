@@ -2,8 +2,6 @@ name: Build-Deploy-Stage
 
 on:
   workflow_dispatch:
-    branches:
-      - stage
 
 env:
   SKIP_AWS: 'true'            # set to 'false' to enable real AWS steps
