@@ -1,0 +1,71 @@
+name: Build-Deploy-Stage
+
+on:
+  workflow_dispatch:
+    branches:
+      - stage
+
+env:
+  AWS_REGION: af-south-1
+  ECR_REPOSITORY: console-stage-web
+  ECS_SERVICE: console-stage-web
+  ECS_CLUSTER: console-stage
+  ECS_CONTAINER_NAME: console-stage-web
+  ECR_BUILD_IMAGE: console-build
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  Build-Deploy:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [24]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Sonarqube Scan
+        uses: SonarSource/sonarqube-scan-action@v6
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+      - name: Configure AWS Credentials (assume role)
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_STAGE_GITHUB_ROLE }}
+          role-session-name: GitHub_to_AWS_via_FederatedOIDC
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Npm install (frontend)
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend (optional)
+        working-directory: frontend
+        run: npm run build
+
+      - name: Build, tag, and push image to Amazon ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: latest
+        run: |
+          # Use frontend folder as context
+          docker pull $ECR_REGISTRY/${{ env.ECR_BUILD_IMAGE }}:$IMAGE_TAG || true
+          docker build -t $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG ./frontend
+          docker push $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG
+
+      - name: ECS Deployment
+        run: |
+          aws ecs update-service --cluster ${{ env.ECS_CLUSTER }} --service ${{ env.ECS_SERVICE }} --force-new-deployment
