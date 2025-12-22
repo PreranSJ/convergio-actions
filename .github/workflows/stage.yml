@@ -65,7 +65,7 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Build frontend (optional)
+      - name: Build frontend
         working-directory: frontend
         run: npm run build
 
@@ -91,4 +91,7 @@ jobs:
       - name: ECS Deployment
         if: ${{ env.SKIP_AWS != 'true' }}
         run: |
-          aws ecs update-service --cluster ${{ env.ECS_CLUSTER }} --service ${{ env.ECS_SERVICE }} --force-new-deployment
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service ${{ env.ECS_SERVICE }} \
+            --force-new-deployment
