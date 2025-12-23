@@ -63,9 +63,9 @@ jobs:
       #     ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
       #     IMAGE_TAG: latest
       #   run: |
-      #     docker pull $ECR_REGISTRY/juniorminds-build:$IMAGE_TAG || true
-      #     docker build -t $ECR_REGISTRY/juniorminds-prod-web:$IMAGE_TAG ./frontend
-      #     docker push $ECR_REGISTRY/juniorminds-prod-web:$IMAGE_TAG
+      #     docker pull $ECR_REGISTRY/convergio-build:$IMAGE_TAG || true
+      #     docker build -t $ECR_REGISTRY/convergio-prod-web:$IMAGE_TAG ./frontend
+      #     docker push $ECR_REGISTRY/convergio-prod-web:$IMAGE_TAG
       #
       # Deploy:
       #   runs-on: ubuntu-latest
@@ -82,12 +82,12 @@ jobs:
       #     - name: ECS Deployment
       #       run: |
       #         aws ecs update-service \
-      #           --cluster juniorminds-prod \
-      #           --service juniorminds-prod-web \
+      #           --cluster convergio-prod \
+      #           --service convergio-prod-web \
       #           --force-new-deployment
       #
       #     - name: ECS Service Health
       #       run: |
       #         aws ecs wait services-stable \
-      #           --cluster juniorminds-prod \
-      #           --services juniorminds-prod-web
+      #           --cluster convergio-prod \
+      #           --services convergio-prod-web

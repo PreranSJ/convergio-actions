@@ -63,13 +63,13 @@ jobs:
       #     ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
       #     IMAGE_TAG: latest
       #   run: |
-      #     docker pull $ECR_REGISTRY/console-build:$IMAGE_TAG || true
-      #     docker build -t $ECR_REGISTRY/console-stage-web:$IMAGE_TAG ./frontend
-      #     docker push $ECR_REGISTRY/console-stage-web:$IMAGE_TAG
+      #     docker pull $ECR_REGISTRY/convergio-build:$IMAGE_TAG || true
+      #     docker build -t $ECR_REGISTRY/convergio-stage-web:$IMAGE_TAG ./frontend
+      #     docker push $ECR_REGISTRY/convergio-stage-web:$IMAGE_TAG
       #
       # - name: ECS Deployment
       #   run: |
       #     aws ecs update-service \
-      #       --cluster console-stage \
-      #       --service console-stage-web \
+      #       --cluster convergio-stage \
+      #       --service convergio-stage-web \
       #       --force-new-deployment
