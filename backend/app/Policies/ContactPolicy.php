@@ -14,8 +14,7 @@ class ContactPolicy
 
     public function view(User $user, Contact $contact): bool
     {
-        // Allow users to view contacts within their tenant (including contacts assigned by assignment rules)
-        return $user->tenant_id === $contact->tenant_id;
+        return $this->canAccessContact($user, $contact);
     }
 
     public function create(User $user): bool
@@ -25,13 +24,30 @@ class ContactPolicy
 
     public function update(User $user, Contact $contact): bool
     {
-        // Allow users to update contacts within their tenant (including contacts assigned by assignment rules)
-        return $user->tenant_id === $contact->tenant_id;
+        return $this->canAccessContact($user, $contact);
     }
 
     public function delete(User $user, Contact $contact): bool
     {
-        // Allow users to delete contacts within their tenant (including contacts assigned by assignment rules)
+        return $this->canAccessContact($user, $contact);
+    }
+
+    /**
+     * Check if user can access a contact.
+     * Super admin can access any contact, otherwise user must be in the same tenant.
+     *
+     * @param User $user
+     * @param Contact $contact
+     * @return bool
+     */
+    private function canAccessContact(User $user, Contact $contact): bool
+    {
+        // Super admin can access any contact
+        if ($user->isSuperAdmin()) {
+            return true;
+        }
+        
+        // Allow users to access contacts within their tenant (including contacts assigned by assignment rules)
         return $user->tenant_id === $contact->tenant_id;
     }
 }
