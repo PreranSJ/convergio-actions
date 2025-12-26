@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: rc_convergio_b
+        working-directory: backend
 
     steps:
       - name: Checkout code
@@ -23,8 +23,8 @@ jobs:
         with:
           path: |
             ~/.composer/cache
-            rc_convergio_b/vendor
-          key: ${{ runner.os }}-composer-${{ hashFiles('rc_convergio_b/composer.lock') }}
+            backend/vendor
+          key: ${{ runner.os }}-composer-${{ hashFiles('backend/composer.lock') }}
           restore-keys: |
             ${{ runner.os }}-composer-
 
@@ -57,7 +57,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: rc_convergio_b
+        working-directory: backend
 
     steps:
       - name: Checkout code
