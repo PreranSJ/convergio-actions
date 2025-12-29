@@ -39,18 +39,17 @@ jobs:
         run: composer install --prefer-dist --no-progress --no-interaction
 
       - name: Dependency Security Audit (Composer)
-        run: composer audit || true
+        run: composer audit
 
       - name: Check PHP Syntax
         run: |
           echo "Checking PHP syntax..."
-          find app -name "*.php" -exec php -l {} \; 2>/dev/null | grep -v "No syntax errors" || true
-          find routes -name "*.php" -exec php -l {} \; 2>/dev/null | grep -v "No syntax errors" || true
-          find database -name "*.php" -exec php -l {} \; 2>/dev/null | grep -v "No syntax errors" || true
+          find app routes database -name "*.php" -exec php -l {} \;
           echo "✅ PHP syntax check complete"
 
       - name: Run Laravel Pint Format Check
-        run: vendor/bin/pint --test || true
+        run: vendor/bin/pint --test
+
 
   test:
     name: Run Tests
@@ -62,6 +61,16 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.composer/cache
+            backend/vendor
+          key: ${{ runner.os }}-composer-${{ hashFiles('backend/composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-composer-
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -80,14 +89,21 @@ jobs:
         run: php artisan key:generate
 
       - name: Directory Permissions
-        run: chmod -R 755 storage bootstrap/cache || true
+        run: chmod -R 755 storage bootstrap/cache
+
+      - name: Run Migrations (SQLite memory)
+        env:
+          DB_CONNECTION: sqlite
+          DB_DATABASE: ":memory:"
+        run: php artisan migrate --no-interaction
 
       - name: Run Pest / PHPUnit Tests
         env:
           DB_CONNECTION: sqlite
           DB_DATABASE: ":memory:"
           APP_ENV: testing
-        run: php artisan test
+        run: vendor/bin/pest --verbose
+
 
   quality-summary:
     name: Quality Summary
