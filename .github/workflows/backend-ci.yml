@@ -45,15 +45,16 @@ jobs:
       - name: Check PHP Syntax
         run: |
           echo "Checking PHP syntax..."
-          find app routes database -name "*.php" -exec php -l {} \; | grep -v "No syntax errors detected" || true
-          if find app routes database -name "*.php" -exec php -l {} \; 2>&1 | grep -q "Parse error"; then
-            echo "❌ PHP syntax errors found"
-            exit 1
-          fi
+          set -e
+          FILES=$(find app routes database -name "*.php")
+          for file in $FILES; do
+            php -l "$file" >/dev/null
+          done
           echo "✅ PHP syntax check complete"
 
       - name: Run Laravel Pint Format Check
         run: vendor/bin/pint --test
+
 
   test:
     name: Run Tests
@@ -84,7 +85,14 @@ jobs:
           coverage: none
 
       - name: Copy .env (if missing)
-        run: php -r "file_exists('.env') || copy('.env.example', '.env');" || echo "Warning: .env.example not found, continuing..."
+        run: |
+          if [ ! -f .env ]; then
+            if [ -f .env.example ]; then
+              cp .env.example .env
+            else
+              echo "⚠️ .env.example not found, continuing without it"
+            fi
+          fi
 
       - name: Install Dependencies
         run: composer install --prefer-dist --no-progress --no-interaction
@@ -101,12 +109,13 @@ jobs:
           DB_DATABASE: ":memory:"
         run: php artisan migrate --no-interaction
 
-      - name: Run Pest Tests
+      - name: Run Tests (Laravel / Pest)
         env:
           DB_CONNECTION: sqlite
           DB_DATABASE: ":memory:"
           APP_ENV: testing
         run: php artisan test
+
 
   quality-summary:
     name: Quality Summary
