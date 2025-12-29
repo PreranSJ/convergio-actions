@@ -39,13 +39,14 @@ jobs:
         run: composer install --prefer-dist --no-progress --no-interaction
 
       - name: Dependency Security Audit (Composer)
+        # STRICT: pipeline fails if vulnerabilities exist
         run: composer audit
 
       - name: Check PHP Syntax
         run: |
           echo "Checking PHP syntax..."
           find app routes database -name "*.php" -exec php -l {} \;
-          echo "✅ PHP syntax check complete"
+          echo "PHP syntax check complete"
 
       - name: Run Laravel Pint Format Check
         run: vendor/bin/pint --test
@@ -97,12 +98,12 @@ jobs:
           DB_DATABASE: ":memory:"
         run: php artisan migrate --no-interaction
 
-      - name: Run Pest / PHPUnit Tests
+      - name: Run Pest Tests
         env:
           DB_CONNECTION: sqlite
           DB_DATABASE: ":memory:"
           APP_ENV: testing
-        run: vendor/bin/pest --verbose
+        run: vendor/bin/pest
 
 
   quality-summary:
@@ -113,6 +114,5 @@ jobs:
     steps:
       - name: All Backend Checks Passed
         run: |
-          echo "✅ All backend checks passed!"
           echo "✅ Code quality: Passed"
           echo "✅ Tests: Passed"
