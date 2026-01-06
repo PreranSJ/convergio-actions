@@ -1,0 +1,35 @@
+name: Common CI (FE + BE POC)
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_type:
+        description: "frontend or backend"
+        required: true
+        type: choice
+        options:
+          - frontend
+          - backend
+
+jobs:
+  poc:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Show CI repo (should NOT be used)
+        run: |
+          echo "CI repo root:"
+          ls -la
+
+      - name: Checkout REAL application repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.inputs.app_type == 'frontend' && 'avinashsriengeri/rc-convergio-f' || 'Pathan99z/rc_convergio_b' }}
+          ref: main
+          path: app
+
+      - name: Verify fetched repo
+        run: |
+          echo "App type: ${{ github.event.inputs.app_type }}"
+          echo "Fetched repository contents:"
+          ls -la app
